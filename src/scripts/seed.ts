@@ -13,6 +13,17 @@ const seedRows: ReadonlyArray<readonly [string, (typeof eventTypes)[number], str
   ["Reading Circle for Street Children", "Education", "Uttara Sector 7, Dhaka", 25],
 ];
 
+// Fixed dates so the seeded events stay upcoming regardless of when the
+// database is seeded. 04:00 UTC is 10:00 in Dhaka.
+const seedDates = [
+  "2026-12-05T04:00:00.000Z",
+  "2026-12-12T04:00:00.000Z",
+  "2026-12-19T04:00:00.000Z",
+  "2027-01-09T04:00:00.000Z",
+  "2027-01-16T04:00:00.000Z",
+  "2027-01-23T04:00:00.000Z",
+];
+
 const seedEvents: Array<Omit<EventDocument, "_id" | "createdAt" | "updatedAt">> = seedRows.map(([title, type, location, capacity], index) => ({
   title,
   type: type as (typeof eventTypes)[number],
@@ -27,7 +38,7 @@ const seedEvents: Array<Omit<EventDocument, "_id" | "createdAt" | "updatedAt">> 
     "photo-1503676260728-1c00da094a0b",
   ][index]}`,
   description: `Join neighbours for ${title.toLowerCase()}. Bring water, wear comfortable shoes, and arrive ten minutes before the start.`,
-  date: new Date(Date.now() + (index + 2) * 86400000),
+  date: new Date(seedDates[index]),
   attendeeCount: 0,
   organizerId: "seed-shomaj-shathi",
   organizerEmail: "community@shomajshathi.local",
