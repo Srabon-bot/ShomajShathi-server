@@ -4,9 +4,8 @@ import { z } from "zod";
 
 import { getDatabase } from "../db/connect.js";
 import { toEventDto } from "../lib/to-event-dto.js";
+import { currentUser, requireAuth } from "../middleware/auth.js";
 import { eventTypes, type EventDocument } from "../models/event.model.js";
-import type { EventWriteIdentity } from "../models/event.model.js";
-import { env } from "../config/env.js";
 
 const querySchema = z.object({
   scope: z.enum(["upcoming"]).default("upcoming"),
@@ -29,14 +28,6 @@ const eventWriteSchema = z.object({
   capacity: z.coerce.number().int().min(1).max(1000).default(50),
 });
 
-function getWriteIdentity(request: import("express").Request): EventWriteIdentity | null {
-  if (!env.ALLOW_ANON_WRITES) return null;
-  const email = request.header("x-dev-email")?.trim().toLowerCase();
-  if (!email || !z.string().email().safeParse(email).success) return null;
-  const name = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  return { id: `dev:${email}`, email, name };
-}
-
 function parseWriteInput(request: import("express").Request) {
   const input = eventWriteSchema.parse(request.body);
   if (input.date <= new Date()) {
@@ -47,19 +38,16 @@ function parseWriteInput(request: import("express").Request) {
   return input;
 }
 
-function writeDisabled(response: import("express").Response) {
-  response.status(401).json({ success: false, message: "Authentication is required for event management." });
+function param(request: import("express").Request, key: string) {
+  const value = request.params[key];
+  return Array.isArray(value) ? (value[0] ?? "") : value;
 }
 
-eventRouter.get("/mine", async (request, response, next) => {
+eventRouter.get("/mine", requireAuth, async (request, response, next) => {
   try {
-    const identity = getWriteIdentity(request);
-    if (!identity) {
-      writeDisabled(response);
-      return;
-    }
+    const user = currentUser(request);
     const events = await getDatabase().collection<EventDocument>("events")
-      .find({ organizerId: identity.id })
+      .find({ organizerId: user.id })
       .sort({ date: -1 })
       .toArray();
     response.json({ success: true, data: events.map(toEventDto) });
@@ -68,21 +56,18 @@ eventRouter.get("/mine", async (request, response, next) => {
   }
 });
 
-eventRouter.post("/", async (request, response, next) => {
+eventRouter.post("/", requireAuth, async (request, response, next) => {
   try {
-    const identity = getWriteIdentity(request);
-    if (!identity) {
-      writeDisabled(response);
-      return;
-    }
+    const user = currentUser(request);
     const input = parseWriteInput(request);
     const now = new Date();
     const event: EventDocument = {
       ...input,
       attendeeCount: 0,
-      organizerId: identity.id,
-      organizerEmail: identity.email,
-      organizerName: identity.name,
+      organizerId: user.id,
+      organizerEmail: user.email,
+      organizerName: user.name,
+      organizerImage: user.image,
       createdAt: now,
       updatedAt: now,
     };
@@ -124,25 +109,21 @@ eventRouter.get("/", async (request, response, next) => {
   }
 });
 
-eventRouter.patch("/:id", async (request, response, next) => {
+eventRouter.patch("/:id", requireAuth, async (request, response, next) => {
   try {
-    const identity = getWriteIdentity(request);
-    if (!identity) {
-      writeDisabled(response);
-      return;
-    }
-    if (!ObjectId.isValid(request.params.id)) {
+    const user = currentUser(request);
+    if (!ObjectId.isValid(param(request, "id"))) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
     const input = parseWriteInput(request);
     const collection = getDatabase().collection<EventDocument>("events");
-    const existing = await collection.findOne({ _id: new ObjectId(request.params.id) });
+    const existing = await collection.findOne({ _id: new ObjectId(param(request, "id")) });
     if (!existing) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
-    if (existing.organizerId !== identity.id) {
+    if (existing.organizerId !== user.id) {
       response.status(403).json({ success: false, message: "You can only manage your own events." });
       return;
     }
@@ -155,25 +136,21 @@ eventRouter.patch("/:id", async (request, response, next) => {
   }
 });
 
-eventRouter.delete("/:id", async (request, response, next) => {
+eventRouter.delete("/:id", requireAuth, async (request, response, next) => {
   try {
-    const identity = getWriteIdentity(request);
-    if (!identity) {
-      writeDisabled(response);
-      return;
-    }
-    if (!ObjectId.isValid(request.params.id)) {
+    const user = currentUser(request);
+    if (!ObjectId.isValid(param(request, "id"))) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
     const collection = getDatabase().collection<EventDocument>("events");
-    const eventId = new ObjectId(request.params.id);
+    const eventId = new ObjectId(param(request, "id"));
     const existing = await collection.findOne({ _id: eventId });
     if (!existing) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
-    if (existing.organizerId !== identity.id) {
+    if (existing.organizerId !== user.id) {
       response.status(403).json({ success: false, message: "You can only manage your own events." });
       return;
     }
@@ -187,11 +164,11 @@ eventRouter.delete("/:id", async (request, response, next) => {
 
 eventRouter.get("/:id", async (request, response, next) => {
   try {
-    if (!ObjectId.isValid(request.params.id)) {
+    if (!ObjectId.isValid(param(request, "id"))) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
-    const event = await getDatabase().collection<EventDocument>("events").findOne({ _id: new ObjectId(request.params.id) });
+    const event = await getDatabase().collection<EventDocument>("events").findOne({ _id: new ObjectId(param(request, "id")) });
     if (!event) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;

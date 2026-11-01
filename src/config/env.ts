@@ -7,7 +7,6 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1),
   MONGODB_DB: z.string().min(1).default("shomaj_shathi"),
   CLIENT_ORIGIN: z.string().url().default("http://localhost:3000"),
-  ALLOW_ANON_WRITES: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 });
 
 export const env = envSchema.parse(process.env);

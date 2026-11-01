@@ -20,9 +20,3 @@ export interface EventDocument {
   createdAt: Date;
   updatedAt: Date;
 }
-
-export interface EventWriteIdentity {
-  id: string;
-  email: string;
-  name: string;
-}
