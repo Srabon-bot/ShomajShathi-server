@@ -17,6 +17,10 @@ export function createApp() {
     console.log(`${request.method} ${request.originalUrl} ${Date.now() - startedAt}ms`);
   });
 
+  app.get("/", (_request, response) => {
+    response.json({ success: true, data: { service: "Shomaj Shathi API" } });
+  });
+
   app.get("/api/health", (_request, response) => {
     response.json({ success: true, data: { status: "ok" } });
   });
