@@ -8,8 +8,9 @@ import { eventRouter } from "./routes/event.routes.js";
 
 export function createApp() {
   const app = express();
+  const clientOrigin = env.CLIENT_ORIGIN.replace(/\/$/, "");
   app.use(helmet());
-  app.use(cors({ origin: env.CLIENT_ORIGIN }));
+  app.use(cors({ origin: clientOrigin }));
   app.use(express.json({ limit: "100kb" }));
   app.use((request, _response, next) => {
     const startedAt = Date.now();
