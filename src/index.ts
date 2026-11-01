@@ -11,7 +11,11 @@ async function start() {
   app.listen(env.PORT, () => console.log(`Uddom API listening on port ${env.PORT}`));
 }
 
-start().catch((error: unknown) => {
-  console.error("Unable to start Uddom API", error);
-  process.exitCode = 1;
-});
+if (!process.env.VERCEL) {
+  start().catch((error: unknown) => {
+    console.error("Unable to start Uddom API", error);
+    process.exitCode = 1;
+  });
+}
+
+export default app;

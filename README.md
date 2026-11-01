@@ -24,11 +24,16 @@ npm run seed
 
 ## Deployment checklist
 
-Render build command: `npm ci && npm run build`  
-Render start command: `npm start`  
-Health check path: `/api/health`
+For a Vercel deployment matching the mentor project, import this server
+repository as a Vercel project. The included `vercel.json` deploys the
+TypeScript Express entrypoint as a Node function. Local development still uses
+`npm run dev`, and a traditional Node host can use `npm run build` followed by
+`npm start`.
 
-Configure `MONGODB_URI`, `MONGODB_DB`, `CLIENT_ORIGIN` (the exact Vercel origin without a
-trailing slash), `PORT`, and `NODE_ENV` in Render. Use an Atlas M0 database,
-create a dedicated database user, and allow the deployment network access.
-Never commit `.env` or database credentials.
+Configure `MONGODB_URI`, `MONGODB_DB`, `CLIENT_ORIGIN` (the exact client
+Vercel origin without a trailing slash), `PORT`, and `NODE_ENV` locally. Use an
+Atlas M0 database, create a dedicated database user, and allow the deployment
+network access. Never commit `.env` or database credentials.
+
+For Vercel, configure the same `MONGODB_URI`, `MONGODB_DB`, and `CLIENT_ORIGIN`
+variables in the server project. `PORT` is only needed for local execution.

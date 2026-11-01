@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 
 import { env } from "./config/env.js";
+import { connectDatabase } from "./db/connect.js";
 import { eventRouter } from "./routes/event.routes.js";
 
 export function createApp() {
@@ -18,6 +19,15 @@ export function createApp() {
 
   app.get("/api/health", (_request, response) => {
     response.json({ success: true, data: { status: "ok" } });
+  });
+
+  app.use("/api/events", async (_request, _response, next) => {
+    try {
+      await connectDatabase(env.MONGODB_URI, env.MONGODB_DB);
+      next();
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.use("/api/events", eventRouter);
