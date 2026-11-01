@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { ZodError } from "zod";
 
 import { env } from "./config/env.js";
 import { connectDatabase } from "./db/connect.js";
@@ -43,7 +44,14 @@ export function createApp() {
 
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     console.error(error);
-    response.status(500).json({ success: false, message: "Internal server error." });
+    if (error instanceof ZodError) {
+      response.status(400).json({ success: false, message: "Invalid request data.", issues: error.issues });
+      return;
+    }
+    const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
+      ? error.statusCode
+      : 500;
+    response.status(statusCode).json({ success: false, message: statusCode === 500 ? "Internal server error." : String(error instanceof Error ? error.message : error) });
   });
 
   return app;
