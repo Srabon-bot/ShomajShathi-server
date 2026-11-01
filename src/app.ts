@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { env } from "./config/env.js";
 import { connectDatabase } from "./db/connect.js";
 import { eventRouter } from "./routes/event.routes.js";
+import { joinRouter } from "./routes/join.routes.js";
 
 export function createApp() {
   const app = express();
@@ -27,16 +28,20 @@ export function createApp() {
     response.json({ success: true, data: { status: "ok" } });
   });
 
-  app.use("/api/events", async (_request, _response, next) => {
+  const withDatabase: express.RequestHandler = async (_request, _response, next) => {
     try {
       await connectDatabase(env.MONGODB_URI, env.MONGODB_DB);
       next();
     } catch (error) {
       next(error);
     }
-  });
+  };
+
+  app.use("/api/events", withDatabase);
+  app.use("/api/joins", withDatabase);
 
   app.use("/api/events", eventRouter);
+  app.use("/api/joins", joinRouter);
 
   app.use((_request, response) => {
     response.status(404).json({ success: false, message: "Route not found." });
