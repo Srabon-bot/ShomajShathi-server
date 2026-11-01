@@ -1,8 +1,10 @@
+import { ObjectId } from "mongodb";
 import { Router } from "express";
 import { z } from "zod";
 
-import { EventModel, eventTypes } from "../models/event.model.js";
+import { getDatabase } from "../db/connect.js";
 import { toEventDto } from "../lib/to-event-dto.js";
+import { eventTypes, type EventDocument } from "../models/event.model.js";
 
 const querySchema = z.object({
   scope: z.enum(["upcoming"]).default("upcoming"),
@@ -24,14 +26,16 @@ eventRouter.get("/", async (request, response, next) => {
       const search = query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [{ title: { $regex: search, $options: "i" } }, { location: { $regex: search, $options: "i" } }];
     }
-    const [events, total] = await Promise.all([
-      EventModel.find(filter)
-        .sort({ date: query.sort === "-date" ? -1 : 1 })
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .lean(),
-      EventModel.countDocuments(filter),
-    ]);
+
+    const collection = getDatabase().collection<EventDocument>("events");
+    const total = await collection.countDocuments(filter);
+    const events = await collection
+      .find(filter)
+      .sort({ date: query.sort === "-date" ? -1 : 1 })
+      .skip((query.page - 1) * query.limit)
+      .limit(query.limit)
+      .toArray();
+
     response.json({
       success: true,
       data: events.map(toEventDto),
@@ -44,11 +48,11 @@ eventRouter.get("/", async (request, response, next) => {
 
 eventRouter.get("/:id", async (request, response, next) => {
   try {
-    if (!/^[a-f\d]{24}$/i.test(request.params.id)) {
+    if (!ObjectId.isValid(request.params.id)) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;
     }
-    const event = await EventModel.findById(request.params.id).lean();
+    const event = await getDatabase().collection<EventDocument>("events").findOne({ _id: new ObjectId(request.params.id) });
     if (!event) {
       response.status(404).json({ success: false, message: "Event not found." });
       return;

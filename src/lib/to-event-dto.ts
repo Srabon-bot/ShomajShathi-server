@@ -1,19 +1,7 @@
-export function toEventDto(event: {
-  _id: { toString(): string };
-  title: string;
-  description: string;
-  type: string;
-  image: string;
-  location: string;
-  date: Date;
-  capacity: number;
-  attendeeCount: number;
-  organizerId: string;
-  organizerEmail: string;
-  organizerName: string;
-  organizerImage?: string | null;
-  createdAt: Date;
-}) {
+import type { EventDocument } from "../models/event.model.js";
+
+export function toEventDto(event: EventDocument) {
+  if (!event._id) throw new Error("Event document is missing an id.");
   return {
     id: event._id.toString(),
     title: event.title,

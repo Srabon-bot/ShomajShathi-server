@@ -28,7 +28,7 @@ Render build command: `npm ci && npm run build`
 Render start command: `npm start`  
 Health check path: `/api/health`
 
-Configure `MONGODB_URI`, `CLIENT_ORIGIN` (the exact Vercel origin without a
+Configure `MONGODB_URI`, `MONGODB_DB`, `CLIENT_ORIGIN` (the exact Vercel origin without a
 trailing slash), `PORT`, and `NODE_ENV` in Render. Use an Atlas M0 database,
 create a dedicated database user, and allow the deployment network access.
 Never commit `.env` or database credentials.

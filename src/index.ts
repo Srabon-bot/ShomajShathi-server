@@ -7,7 +7,7 @@ import { connectDatabase } from "./db/connect.js";
 const app = createApp();
 
 async function start() {
-  if (env.MONGODB_URI) await connectDatabase(env.MONGODB_URI);
+  await connectDatabase(env.MONGODB_URI, env.MONGODB_DB);
   app.listen(env.PORT, () => console.log(`Uddom API listening on port ${env.PORT}`));
 }
 
