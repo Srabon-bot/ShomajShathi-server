@@ -160,6 +160,16 @@ joinRouter.delete("/:eventId", requireAuth, async (request, response, next) => {
     const user = currentUser(request);
     const eventId = new ObjectId(param(request, "eventId"));
 
+    const event = await events().findOne({ _id: eventId }, { projection: { date: 1 } });
+    if (!event) {
+      notFound(response);
+      return;
+    }
+    if (event.date.getTime() < Date.now()) {
+      response.status(409).json({ success: false, message: "This event has already taken place." });
+      return;
+    }
+
     const result = await joins().deleteOne({ eventId, userId: user.id });
     if (!result.deletedCount) {
       response.status(404).json({ success: false, message: "You have not joined this event." });

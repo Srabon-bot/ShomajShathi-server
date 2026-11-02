@@ -8,12 +8,12 @@ import { currentUser, requireAuth } from "../middleware/auth.js";
 import { eventTypes, type EventDocument } from "../models/event.model.js";
 
 const querySchema = z.object({
-  scope: z.enum(["upcoming"]).default("upcoming"),
+  scope: z.enum(["upcoming", "past"]).default("upcoming"),
   limit: z.coerce.number().int().min(1).max(24).default(12),
   page: z.coerce.number().int().min(1).default(1),
   type: z.enum(eventTypes).optional(),
   q: z.string().trim().optional(),
-  sort: z.enum(["date", "-date"]).default("date"),
+  sort: z.enum(["date", "-date"]).optional(),
 });
 
 export const eventRouter = Router();
@@ -29,13 +29,15 @@ const eventWriteSchema = z.object({
 });
 
 function parseWriteInput(request: import("express").Request) {
-  const input = eventWriteSchema.parse(request.body);
-  if (input.date <= new Date()) {
+  return eventWriteSchema.parse(request.body);
+}
+
+function assertFuture(date: Date) {
+  if (date <= new Date()) {
     const error = new Error("Event date must be in the future.") as Error & { statusCode?: number };
     error.statusCode = 400;
     throw error;
   }
-  return input;
 }
 
 function param(request: import("express").Request, key: string) {
@@ -60,6 +62,7 @@ eventRouter.post("/", requireAuth, async (request, response, next) => {
   try {
     const user = currentUser(request);
     const input = parseWriteInput(request);
+    assertFuture(input.date);
     const now = new Date();
     const event: EventDocument = {
       ...input,
@@ -80,21 +83,53 @@ eventRouter.post("/", requireAuth, async (request, response, next) => {
   }
 });
 
+eventRouter.get("/stats", async (_request, response, next) => {
+  try {
+    const now = new Date();
+    const collection = getDatabase().collection<EventDocument>("events");
+    const [pastEvents, upcomingEvents, totals, nextEvent] = await Promise.all([
+      collection.countDocuments({ date: { $lt: now } }),
+      collection.countDocuments({ date: { $gte: now } }),
+      collection
+        .aggregate<{ volunteers: number }>([
+          { $match: { date: { $lt: now } } },
+          { $group: { _id: null, volunteers: { $sum: "$attendeeCount" } } },
+        ])
+        .toArray(),
+      collection.find({ date: { $gte: now } }).sort({ date: 1 }).limit(1).next(),
+    ]);
+
+    response.json({
+      success: true,
+      data: {
+        pastEvents,
+        upcomingEvents,
+        volunteers: totals[0]?.volunteers ?? 0,
+        nextEventDate: nextEvent?.date.toISOString() ?? null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 eventRouter.get("/", async (request, response, next) => {
   try {
     const query = querySchema.parse(request.query);
-    const filter: Record<string, unknown> = query.scope === "upcoming" ? { date: { $gte: new Date() } } : {};
+    const now = new Date();
+    const filter: Record<string, unknown> = { date: query.scope === "past" ? { $lt: now } : { $gte: now } };
     if (query.type) filter.type = query.type;
     if (query.q) {
       const search = query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [{ title: { $regex: search, $options: "i" } }, { location: { $regex: search, $options: "i" } }];
     }
 
+    const sort = query.sort ?? (query.scope === "past" ? "-date" : "date");
     const collection = getDatabase().collection<EventDocument>("events");
     const total = await collection.countDocuments(filter);
     const events = await collection
       .find(filter)
-      .sort({ date: query.sort === "-date" ? -1 : 1 })
+      .sort({ date: sort === "-date" ? -1 : 1 })
       .skip((query.page - 1) * query.limit)
       .limit(query.limit)
       .toArray();
@@ -127,6 +162,9 @@ eventRouter.patch("/:id", requireAuth, async (request, response, next) => {
       response.status(403).json({ success: false, message: "You can only manage your own events." });
       return;
     }
+    // Events that have already happened are historical records, so they may be
+    // edited without a future date. Upcoming events must stay in the future.
+    if (existing.date.getTime() >= Date.now()) assertFuture(input.date);
     await collection.updateOne({ _id: existing._id }, { $set: { ...input, updatedAt: new Date() } });
     const updated = await collection.findOne({ _id: existing._id });
     if (!updated) throw new Error("Updated event could not be loaded.");
