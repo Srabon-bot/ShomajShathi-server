@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { ZodError } from "zod";
 
@@ -8,9 +9,36 @@ import { connectDatabase } from "./db/connect.js";
 import { eventRouter } from "./routes/event.routes.js";
 import { joinRouter } from "./routes/join.routes.js";
 
+const RATE_LIMIT_MESSAGE = "Too many requests. Please try again shortly.";
+
+function createLimiter(windowMs: number, limit: number) {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (request) => request.method === "OPTIONS",
+    message: { success: false, message: RATE_LIMIT_MESSAGE },
+  });
+}
+
+/** Applies a limiter only to POST/PATCH/DELETE so reads stay uncounted. */
+function writesOnly(limiter: express.RequestHandler): express.RequestHandler {
+  return (request, response, next) => {
+    const isWrite = request.method === "POST" || request.method === "PATCH" || request.method === "DELETE";
+    if (isWrite) {
+      limiter(request, response, next);
+      return;
+    }
+    next();
+  };
+}
+
 export function createApp() {
   const app = express();
   const clientOrigin = env.CLIENT_ORIGIN.replace(/\/$/, "");
+  // Vercel terminates TLS in front of the function, so trust one proxy hop.
+  app.set("trust proxy", 1);
   app.use(helmet());
   app.use(cors({ origin: clientOrigin }));
   app.use(express.json({ limit: "100kb" }));
@@ -19,6 +47,8 @@ export function createApp() {
     next();
     console.log(`${request.method} ${request.originalUrl} ${Date.now() - startedAt}ms`);
   });
+
+  app.use(createLimiter(15 * 60 * 1000, 300));
 
   app.get("/", (_request, response) => {
     response.json({ success: true, data: { service: "Shomaj Shathi API" } });
@@ -37,6 +67,8 @@ export function createApp() {
     }
   };
 
+  app.use("/api/events", writesOnly(createLimiter(60 * 1000, 10)));
+  app.use("/api/joins", writesOnly(createLimiter(60 * 1000, 10)));
   app.use("/api/events", withDatabase);
   app.use("/api/joins", withDatabase);
 
