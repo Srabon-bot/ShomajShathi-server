@@ -32,6 +32,60 @@ Signed in:
 - `POST /api/joins/:eventId`
 - `DELETE /api/joins/:eventId`
 
+## Security and limits
+
+- Every write and member endpoint verifies a BetterAuth JWT against
+  `${CLIENT_ORIGIN}/api/auth/jwks`, including the `iss` and `aud` claims.
+- Ownership is enforced server-side; non-owners receive `403`, missing events
+  receive `404`.
+- CORS allows only `CLIENT_ORIGIN`; unknown origins receive no allow header.
+- JSON bodies are capped at 100kb and invalid bodies return `400`.
+- 300 requests per 15 minutes per IP, plus 10 writes per minute on
+  `/api/events` and `/api/joins`. Excess writes return `429` with the standard
+  error envelope. Limits use an in-memory store, so each serverless instance
+  keeps its own counter.
+- Production errors return a generic `500` message and never a stack trace.
+
+## Verification
+
+`scripts/auth-matrix.mjs` runs the auth, ownership, validation, CORS and
+rate-limit matrix against a deployed API. It creates two temporary accounts and
+an event, then removes all of them again. Cleanup needs `MONGODB_URI` and
+`MONGODB_DB` in `.env`.
+
+```powershell
+npm run test:matrix
+```
+
+Last run against `https://shomajshathi-server.vercel.app` on 2 November 2026:
+**23/23 passed**.
+
+```text
+PASS  public events list                         200
+PASS  write without token                        401
+PASS  write with tampered token                  401
+PASS  past date rejected                         400
+PASS  invalid body rejected                      400
+PASS  create own event                           201
+PASS  non-owner patch forbidden                  403
+PASS  non-owner delete forbidden                 403
+PASS  owner patch succeeds                       200
+PASS  non-JSON write rejected                    400
+PASS  owner joins event                          201
+PASS  duplicate join rejected                    409
+PASS  join full event rejected                   409
+PASS  joined list is auth-only                   200
+PASS  joined list contains event
+PASS  own events list is auth-only               200
+PASS  unknown origin gets no allow header
+PASS  app origin gets allow header
+PASS  delete own event                           204
+PASS  missing event returns 404
+PASS  rapid writes reach 429                     429s=23
+PASS  rate-limit envelope                        Too many requests. Please try again shortly.
+PASS  temporary data cleaned up
+```
+
 ## Local development
 
 ```powershell
